@@ -26,6 +26,9 @@
 # Visual Studio cache directory
 .vs/
 
+# Ignore Vuforia package
+Packages/com.ptc.vuforia.engine-*.tgz
+
 # Gradle cache directory
 .gradle/
 
