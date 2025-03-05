@@ -6,37 +6,36 @@ using ZXing.QrCode;
 using System.Collections;
 using UnityEngine.Windows.WebCam;
 using System;
+using System.Drawing;
+using UnityEditor;
+using NUnit.Framework;
+using System.Collections.Generic;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
+using static UnityEngine.UI.GridLayoutGroup;
+using Vuforia;
+using UnityEngine.PlayerLoop;
 
 public class QRScanner : MonoBehaviour
 {
-    /*
-    BarcodeReader<RGBLuminanceSource> barReader;
-    WebCamTexture camTexture;
+    GameObject videoBackground;
 
-    //RGBLuminanceSource RGBsource;
-    */
-
+    public float customZValue = 100f;
+    public GameObject qrPosTracker;
     public RawImage rawCamOutput;
     int camHeight;
     int camWidth;
     byte[] imageBytes;
-    /*
-    byte value = 0;
-    Color[] pixels;
-
-    int webcamResolutionX = 3840;
-    int webcamResolutionY = 2160;
-    int webcamFPS = 30;
-    */
     System.Func<RGBLuminanceSource, LuminanceSource> f;
-    
+    List<Vector2> qrPositions = new List<Vector2>();
+    VuforiaCameraTexture vuforiaCam;
 
     private WebCamTexture webcamTexture;
     private BarcodeReader<RGBLuminanceSource> barcodeReader;
 
     void Start()
     {
-        f = Sum;
+        vuforiaCam = GetComponent<VuforiaCameraTexture>();
+
         barcodeReader = new BarcodeReader<RGBLuminanceSource>(f)
         {
             AutoRotate = true,
@@ -47,53 +46,55 @@ public class QRScanner : MonoBehaviour
             }
         };
 
-        // Initialize ZXing barcode reader
-        /*
-        barcodeReader = new BarcodeReader(f)
-        {
-            AutoRotate = true,
-            Options = new DecodingOptions
-            {
-                TryHarder = true,
-                PossibleFormats = new[] { BarcodeFormat.QR_CODE }
-            },
-            
-        };
-        */
-
         // Start the webcam
-        webcamTexture = new WebCamTexture(720, 480, 60);
-
+        //webcamTexture = new WebCamTexture(720, 480, 60);
         //webcamTexture = new WebCamTexture();
         
-        rawCamOutput.texture = webcamTexture;
-        //GetComponent<Renderer>().material.mainTexture = webcamTexture;
-        webcamTexture.Play();
-
-        // Start scanning loop
-        InvokeRepeating(nameof(ScanQRCode), 0.5f, 0.5f);
+        
+        //webcamTexture.Play();
+        //InvokeRepeating(nameof(ScanQRCode), 0.5f, 0.5f);
     }
 
     void ScanQRCode()
     {
-        if (webcamTexture.width > 100 && webcamTexture.height > 100)
+        if (videoBackground == null)
         {
-            try
+            videoBackground = GameObject.Find("VideoBackground");
+        }
+        
+        if (videoBackground != null)
+        {
+            if (videoBackground.activeSelf)
             {
-                Color32[] pixels = webcamTexture.GetPixels32();
-                int width = webcamTexture.width;
-                int height = webcamTexture.height;
-                // Convert Color32[] to a byte array
+                videoBackground.SetActive(false);
+            }
+        }
 
+        //if (webcamTexture.width > 100 && webcamTexture.height > 100)
+        {
+            //try
+            {
+                Texture2D tx = vuforiaCam.GetCameraTexture();
+                if (tx == null)
+                {
+                    return;
+                }
+                rawCamOutput.texture = tx;
+
+                Color32[] pixels = vuforiaCam.GetColorArray();
+                int width = vuforiaCam.camWidth;
+                int height = vuforiaCam.camHeight;
                 byte[] rawRGB = ConvertColor32ToByteArray(pixels);
-
-                // Create Luminance Source
                 LuminanceSource source = new RGBLuminanceSource(rawRGB, width, height, RGBLuminanceSource.BitmapFormat.RGB32);
 
                 Result[] results = barcodeReader.DecodeMultiple(source);
-                //var result = barcodeReader.Decode(pixels, width, height, RGBLuminanceSource.BitmapFormat.RGB24);
-
                 string allCodes = "QRs detected: ";
+                qrPositions.Clear();
+
+                if (results == null || results.Length == 0)
+                {
+                    return;
+                }
 
                 for (int i = 0; i < results.Length; i++)
                 {
@@ -104,22 +105,66 @@ public class QRScanner : MonoBehaviour
                     allCodes += results[i].Text;
                     ResultPoint[] points = results[i].ResultPoints;
 
+
+                    //float averageX = (points[0].X + points[1].X + points[2].X) / 3f;
+                    //float averageY = (points[0].Y + points[1].Y + points[2].Y) / 3f;
+                    float averageX = (points[0].X + points[2].X) / 2f;
+                    float averageY = (points[0].Y + points[2].Y) / 2f;
+                    Vector2 averagePosition = new Vector2(averageX, averageY);
+                    qrPositions.Add(averagePosition);
+
+
                     if (allCodes != "QRs detected: , ")
                     {
                         //Debug.Log(output + " : " + points[1]);
-                        Debug.Log(allCodes);
+                        Debug.Log(allCodes + " - At Position: " + averagePosition);
                     }
                 }
 
-                //if (result != null)
-                //{
-                //    Debug.Log("QR Code Detected: " + result.Text);
-                //}
             }
-            catch (Exception e)
-            {
+            //catch (Exception e)
+            //{
                 //Debug.Log("QR Scanning Error: " + e.Message);
-            }
+            //}
+        }
+        //else
+        //{
+        //    Debug.LogWarning("Image was smaller than 100x100");
+        //}
+    }
+    
+
+    private void Update()
+    {
+        //if (videoBackground == null)
+        //{
+        //    return;
+        //}
+
+        ScanQRCode();
+
+        foreach (Vector2 qrPosition in qrPositions)
+        {
+            Resolution currentResolution = Screen.currentResolution;
+            int w = currentResolution.width;
+
+            Vector2 invertedYPos = new Vector2(qrPosition.x, (float)vuforiaCam.camHeight - qrPosition.y);
+            invertedYPos -= (new Vector2((float)vuforiaCam.camWidth, (float)vuforiaCam.camHeight) / 2f);
+            //Vector3 screenpoint = Camera.main.transform.InverseTransformPoint(invertedYPos);
+            //Vector3 screenpoint = Camera.main.ScreenToWorldPoint
+
+            //Vector2 worldPoint = new Vector2(
+            //    Mathf.Lerp(0f, videoBackground.transform.localScale.x, screenpoint.x / (float)vuforiaCam.camWidth),
+            //    Mathf.Lerp(0f, videoBackground.transform.localScale.y, screenpoint.y / (float)vuforiaCam.camHeight)
+            //    );
+
+            qrPosTracker.transform.localPosition = new Vector3(invertedYPos.x, invertedYPos.y, 1900f);
+            //qrPosTracker.transform.localPosition = new Vector3(worldPoint.x, worldPoint.y, customZValue);
+            qrPosTracker.transform.localRotation = Quaternion.Inverse(Camera.main.transform.localRotation);
+            //qrPosTracker.transform.localRotation = Quaternion.identity;
+            
+            //Gizmos.matrix = Camera.main.transform.worldToLocalMatrix;
+            //Gizmos.DrawCube(qrPosition, Vector3.one);
         }
     }
 
@@ -137,126 +182,8 @@ public class QRScanner : MonoBehaviour
         return bytes;
     }
 
-    void OnDestroy()
-    {
-        webcamTexture.Stop();
-    }
-
-    RGBLuminanceSource Sum(RGBLuminanceSource _source)
-    {
-        //ReadTexture();
-        return new RGBLuminanceSource(imageBytes, camWidth, camHeight);
-    }
-
+    //void OnDestroy()
+    //{
+    //    webcamTexture.Stop();
+    //}
 }
-    /*
-
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        //WebCam webCam = new WebCam();
-        camTexture = new WebCamTexture(webcamResolutionX, webcamResolutionY, webcamFPS);
-        camHeight = camTexture.height;
-        camWidth = camTexture.width;
-        camTexture.Play();
-        rawCamOutput.texture = camTexture;
-        f = Sum;
-        barReader = new BarcodeReader<RGBLuminanceSource>(f);
-    }
-
-    
-
-    private void ReadTexture()
-    {
-        pixels = camTexture.GetPixels();
-        imageBytes = new byte[pixels.Length * 3];
-
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            ConvertColorToBW(pixels[i], i);
-        }
-    }
-
-    
-    public void ConvertColorToBW(Color _color, int _index)
-    {
-        float r, g, b;
-        r = _color.r;
-        g = _color.g;
-        b = _color.b;
-        
-        if (r + g + b > 1.5f)
-        {
-            r = 1f;
-            g = 1f;
-            b = 1f;
-        }
-        else
-        {
-            r = 0f;
-            g = 0f;
-            b = 0f;
-        }
-
-        imageBytes[0 + _index] = (byte)(r * 255);
-        imageBytes[1 + _index] = (byte)(g * 255);
-        imageBytes[2 + _index] = (byte)(b * 255);
-
-        //v = (byte)r;
-
-        //return new Color(r, g, b);
-
-        //float hue, sat, val;
-        //Color.RGBToHSV(new Color(r, g, b), out hue, out sat, out val);
-        //return Color.HSVToRGB(hue, 0f, val, false);
-    }
-    
-
-    // Update is called once per frame
-    void Update()
-    {
-        if (!camTexture.isPlaying)
-        {
-            Debug.Log("Camera offline");
-            return;
-        }
-
-        ReadTexture();
-        Result[] results = barReader.DecodeMultiple(imageBytes, camWidth, camHeight, RGBLuminanceSource.BitmapFormat.RGB24);
-        //Result[] results = barReader.DecodeMultiple();
-
-        if (results != null && results.Length > 0)
-        {
-            for (int i = 0; i < results.Length; i++)
-            {
-                string output = results[i].Text;
-                ResultPoint[] points = results[i].ResultPoints;
-
-                if (output != "")
-                {
-                    //Debug.Log(output + " : " + points[1]);
-                    Debug.Log(output);
-                }
-            }
-        }
-    }
-}
-*/
-
-
-/*
-public class BinarizerCustom : Binarizer
-{
-    public override BitMatrix BlackMatrix => throw new System.NotImplementedException();
-
-    public override Binarizer createBinarizer(LuminanceSource source)
-    {
-        throw new System.NotImplementedException();
-    }
-
-    public override BitArray getBlackRow(int y, BitArray row)
-    {
-        throw new System.NotImplementedException();
-    }
-}
-*/
