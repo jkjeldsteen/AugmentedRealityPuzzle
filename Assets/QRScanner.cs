@@ -14,10 +14,19 @@ using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 using static UnityEngine.UI.GridLayoutGroup;
 using Vuforia;
 using UnityEngine.PlayerLoop;
+using Unity.XR.CoreUtils;
 
 public class QRScanner : MonoBehaviour
 {
     GameObject videoBackground;
+
+    [Header("Targets")]
+    public float errorMargain = 10f;
+    Quaternion upTarget = new Quaternion();
+    Quaternion rightTarget = new Quaternion();
+    Quaternion downTarget = new Quaternion();
+    Quaternion leftTarget = new Quaternion();
+    float[] diffs = new float[4];
 
     public float customZValue = 100f;
     public GameObject qrPosTracker;
@@ -26,7 +35,7 @@ public class QRScanner : MonoBehaviour
     int camWidth;
     byte[] imageBytes;
     System.Func<RGBLuminanceSource, LuminanceSource> f;
-    List<Vector2> qrPositions = new List<Vector2>();
+    List<Tuple<Vector2, Vector3>> qrTransforms = new List<Tuple<Vector2, Vector3>>();
     VuforiaCameraTexture vuforiaCam;
 
     private WebCamTexture webcamTexture;
@@ -46,11 +55,17 @@ public class QRScanner : MonoBehaviour
             }
         };
 
+
+        upTarget.eulerAngles = new Vector3(-90, 0, 0);
+        rightTarget.eulerAngles = new Vector3(0, 90, -90);
+        downTarget.eulerAngles = new Vector3(90, 0, -180);
+        leftTarget.eulerAngles = new Vector3(0, -90, 90);
+
         // Start the webcam
         //webcamTexture = new WebCamTexture(720, 480, 60);
         //webcamTexture = new WebCamTexture();
-        
-        
+
+
         //webcamTexture.Play();
         //InvokeRepeating(nameof(ScanQRCode), 0.5f, 0.5f);
     }
@@ -89,7 +104,7 @@ public class QRScanner : MonoBehaviour
 
                 Result[] results = barcodeReader.DecodeMultiple(source);
                 string allCodes = "QRs detected: ";
-                qrPositions.Clear();
+                qrTransforms.Clear();
 
                 if (results == null || results.Length == 0)
                 {
@@ -104,20 +119,35 @@ public class QRScanner : MonoBehaviour
                     }
                     allCodes += results[i].Text;
                     ResultPoint[] points = results[i].ResultPoints;
-
+                    //object orientation;
+                    //results[i].ResultMetadata.TryGetValue(ResultMetadataType.ORIENTATION, out orientation);
+                    //int orientationDegress = Convert.ToInt32(orientation);
 
                     //float averageX = (points[0].X + points[1].X + points[2].X) / 3f;
                     //float averageY = (points[0].Y + points[1].Y + points[2].Y) / 3f;
+
+                    Vector2 p0 = new Vector2(points[0].X, points[0].Y);
+                    Vector2 p1 = new Vector2(points[1].X, points[1].Y);
+                    Vector2 p2 = new Vector2(points[2].X, points[2].Y);
+
+                    //Vector2 dir = Vector3.Normalize(p0 - p2);
+
+                    //float angle = Vector2.Angle(p0, p2);
+
                     float averageX = (points[0].X + points[2].X) / 2f;
                     float averageY = (points[0].Y + points[2].Y) / 2f;
                     Vector2 averagePosition = new Vector2(averageX, averageY);
-                    qrPositions.Add(averagePosition);
+                    Vector3 dir = Vector3.Normalize(averagePosition - p1);
+
+                    qrTransforms.Add(new Tuple<Vector2, Vector3>(averagePosition, dir));
 
 
                     if (allCodes != "QRs detected: , ")
                     {
-                        //Debug.Log(output + " : " + points[1]);
-                        Debug.Log(allCodes + " - At Position: " + averagePosition);
+                        //Debug.Log(dir);
+                        //Debug.Log(points[0]);
+                        //Debug.Log(allCodes + " - At Position: " + averagePosition);
+                        //Debug.Log(allCodes + " - With rotation degrees: " + orientationDegress);
                     }
                 }
 
@@ -143,12 +173,12 @@ public class QRScanner : MonoBehaviour
 
         ScanQRCode();
 
-        foreach (Vector2 qrPosition in qrPositions)
+        foreach (Tuple<Vector2, Vector3> qr in qrTransforms)
         {
             Resolution currentResolution = Screen.currentResolution;
             int w = currentResolution.width;
 
-            Vector2 invertedYPos = new Vector2(qrPosition.x, (float)vuforiaCam.camHeight - qrPosition.y);
+            Vector2 invertedYPos = new Vector2(qr.Item1.x, (float)vuforiaCam.camHeight - qr.Item1.y);
             invertedYPos -= (new Vector2((float)vuforiaCam.camWidth, (float)vuforiaCam.camHeight) / 2f);
             //Vector3 screenpoint = Camera.main.transform.InverseTransformPoint(invertedYPos);
             //Vector3 screenpoint = Camera.main.ScreenToWorldPoint
@@ -159,12 +189,40 @@ public class QRScanner : MonoBehaviour
             //    );
 
             qrPosTracker.transform.localPosition = new Vector3(invertedYPos.x, invertedYPos.y, 1900f);
-            //qrPosTracker.transform.localPosition = new Vector3(worldPoint.x, worldPoint.y, customZValue);
             qrPosTracker.transform.localRotation = Quaternion.Inverse(Camera.main.transform.localRotation);
-            //qrPosTracker.transform.localRotation = Quaternion.identity;
-            
+            qrPosTracker.transform.localRotation.SetLookRotation(qr.Item2, Vector3.forward);
+
+            DetectDirection(qrPosTracker.transform.localRotation);
+
             //Gizmos.matrix = Camera.main.transform.worldToLocalMatrix;
             //Gizmos.DrawCube(qrPosition, Vector3.one);
+        }
+    }
+
+    private void DetectDirection(Quaternion _rotation)
+    {
+        diffs[0] = Quaternion.Angle(upTarget, _rotation);
+        diffs[1] = Quaternion.Angle(rightTarget, _rotation);
+        diffs[2] = Quaternion.Angle(downTarget, _rotation);
+        diffs[3] = Quaternion.Angle(leftTarget, _rotation);
+
+        float smallest = Mathf.Min(diffs);
+
+        if (smallest == diffs[0])
+        {
+            Debug.Log("UP");
+        }
+        else if (smallest == diffs[1])
+        {
+            Debug.Log("RIGHT");
+        }
+        else if (smallest == diffs[2])
+        {
+            Debug.Log("DOWN");
+        }
+        else if (smallest == diffs[3])
+        {
+            Debug.Log("LEFT");
         }
     }
 
