@@ -3,10 +3,16 @@ using UnityEngine;
 
 public class PuzzlePiece : MonoBehaviour
 {
+    public bool statusUp = false;
+    public bool statusRight = false;
+    public bool statusDown = false;
+    public bool statusLeft = false;
+
     public KeyValuePair<int, PieceDirection> correctUp;
     public KeyValuePair<int, PieceDirection> correctRight;
     public KeyValuePair<int, PieceDirection> correctDown;
     public KeyValuePair<int, PieceDirection> correctLeft;
+
     public int pieceName;
     public Vector2 boardPosition;
     public PieceDirection currentDirection;

@@ -20,6 +20,10 @@ public class QRScanner : MonoBehaviour
 {
     GameObject videoBackground;
 
+    public Mesh defualtMesh;
+    public Material defaultMat;
+    public float maxDistanceBetweenPieces = 300f;
+
     [Header("Targets")]
     public float errorMargain = 10f;
     Quaternion upTarget = new Quaternion();
@@ -69,7 +73,7 @@ public class QRScanner : MonoBehaviour
         //webcamTexture = new WebCamTexture();
         //webcamTexture.Play();
 
-        GeneratePuzzleBoardSolution(5, 5);
+        GeneratePuzzleBoardSolution(2, 2);
     }
 
     void GeneratePuzzleBoardSolution(int _width, int _height)
@@ -104,6 +108,11 @@ public class QRScanner : MonoBehaviour
                 puzzlePiece.transform.parent = cameraTransform;
                 puzzlePiece.transform.localPosition = Vector3.zero;
                 puzzlePiece.transform.localRotation = Quaternion.identity;
+                puzzlePiece.transform.localScale = Vector3.one * 125f;
+                MeshFilter mf = puzzlePiece.AddComponent<MeshFilter>();
+                mf.mesh = defualtMesh;
+                MeshRenderer mr = puzzlePiece.AddComponent<MeshRenderer>();
+                mr.material = defaultMat;
             }
         }
 
@@ -183,6 +192,72 @@ public class QRScanner : MonoBehaviour
             qrPuzzlePiece.transform.localRotation = Quaternion.Inverse(Camera.main.transform.localRotation);
             qrPuzzlePiece.transform.localRotation.SetLookRotation(qr.Item2, Vector3.forward);
             qrPuzzlePiece.currentDirection = DetectDirection(qrPuzzlePiece.transform.localRotation);
+
+            UpdatePieceStatus(qrPuzzlePiece);
+        }
+    }
+
+    private void UpdatePieceStatus(PuzzlePiece p)
+    {
+        PuzzlePiece pieceToCheck;
+        float distanceBetweenPieces = 0f;
+
+        for (int i = 0; i < 4; i++)
+        {
+            pieceToCheck = null;
+
+            if (i == 0)
+            {
+                if (p.correctUp.Key == -1) // Piece that should be at this position is empty (outside board)
+                {
+                    p.statusUp = true; // TODO: Maybe check to make sure space is empty
+                }
+                else
+                {
+                    pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctUp.Key);
+                    distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
+                    p.statusUp = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y > p.transform.position.y && pieceToCheck.currentDirection == p.correctUp.Value;
+                }
+            }
+            if (i == 1)
+            {
+                if (p.correctRight.Key == -1) // Outside board check
+                {
+                    p.statusRight = true; // TODO: Maybe check to make sure space is empty
+                }
+                else
+                {
+                    pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctRight.Key);
+                    distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
+                    p.statusRight = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x > p.transform.position.x && pieceToCheck.currentDirection == p.correctRight.Value;
+                }
+            }
+            if (i == 2)
+            {
+                if (p.correctDown.Key == -1) // Outside board check
+                {
+                    p.statusDown = true; // TODO: Maybe check to make sure space is empty
+                }
+                else
+                {
+                    pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctDown.Key);
+                    distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
+                    p.statusDown = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y < p.transform.position.y && pieceToCheck.currentDirection == p.correctDown.Value;
+                }
+            }
+            if (i == 3)
+            {
+                if (p.correctLeft.Key == -1) // Outside board check
+                {
+                    p.statusLeft = true; // TODO: Maybe check to make sure space is empty
+                }
+                else
+                {
+                    pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctLeft.Key);
+                    distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
+                    p.statusLeft = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x < p.transform.position.x && pieceToCheck.currentDirection == p.correctLeft.Value;
+                }
+            }
         }
     }
 
@@ -245,6 +320,7 @@ public class QRScanner : MonoBehaviour
 
             int pieceNumber = -1;
             int.TryParse(results[i].Text, out pieceNumber);
+            Debug.Log("Piecenum: " + pieceNumber);
 
             qrPieces.Add(new Tuple<Vector2, Vector3, int>(averagePosition, dir, pieceNumber));
 

@@ -640,9 +640,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49ed0a359b84bdf459d2c668020cf29d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  defualtMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  defaultMat: {fileID: 2100000, guid: 175fca8ff17e17d4cb0f527c89b3d392, type: 2}
+  maxDistanceBetweenPieces: 300
   errorMargain: 10
   customZValue: 100
-  qrPosTracker: {fileID: 452304126}
+  qrPuzzlePiece: {fileID: 0}
   rawCamOutput: {fileID: 868157161}
   puzzlePieces: []
 --- !u!4 &1034422852
