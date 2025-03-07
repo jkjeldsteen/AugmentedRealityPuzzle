@@ -351,7 +351,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &452304127
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -640,9 +640,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49ed0a359b84bdf459d2c668020cf29d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  errorMargain: 10
   customZValue: 100
   qrPosTracker: {fileID: 452304126}
   rawCamOutput: {fileID: 868157161}
+  puzzlePieces: []
 --- !u!4 &1034422852
 Transform:
   m_ObjectHideFlags: 0
