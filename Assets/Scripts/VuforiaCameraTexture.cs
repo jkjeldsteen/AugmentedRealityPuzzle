@@ -57,12 +57,12 @@ public class VuforiaCameraTexture : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("image was null");
+                //Debug.LogWarning("image was null");
             }
         }
         else
         {
-            Debug.LogWarning("camera was inactive");
+            //Debug.LogWarning("camera was inactive");
         }
     }
 

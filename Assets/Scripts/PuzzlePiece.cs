@@ -13,6 +13,7 @@ public class PuzzlePiece : MonoBehaviour
     public KeyValuePair<int, PieceDirection> correctDown;
     public KeyValuePair<int, PieceDirection> correctLeft;
 
+    public Vector2 fullGridSize;
     public int pieceName;
     public Vector2 boardPosition;
     public PieceDirection currentDirection;
@@ -27,15 +28,25 @@ public class PuzzlePiece : MonoBehaviour
     //    pieceIndex = pieceNumber;
     //}
 
+    Renderer r;
+    MaterialPropertyBlock matBlock;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        
+        r = GetComponent<Renderer>();
+        matBlock = new MaterialPropertyBlock();
     }
 
     // Update is called once per frame
     void Update()
     {
-        
+        if (matBlock != null)
+        {
+            matBlock.SetVector("_samplePosition", boardPosition);
+            matBlock.SetVector("_gridSize", fullGridSize);
+            r.SetPropertyBlock(matBlock);
+            Debug.Log("SET BLOCK : " + boardPosition);
+        }
     }
 }

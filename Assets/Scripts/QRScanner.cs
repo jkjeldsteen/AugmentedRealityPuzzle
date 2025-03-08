@@ -13,19 +13,32 @@ using System.Collections.Generic;
 using Vuforia;
 using Unity.XR.CoreUtils;
 using System.Linq;
+using UnityEditor.Playables;
+using UnityEngine.UIElements;
 
 public enum PieceDirection { UP, RIGHT, DOWN, LEFT }
+
+public class QRPiece
+{
+    public Vector2 position;
+    public float scale;
+    public Vector3 direction;
+    public int id;
+    public bool inView;
+}
 
 public class QRScanner : MonoBehaviour
 {
     GameObject videoBackground;
 
+    [SerializeField] private int puzzleSeed = 0;
+    [SerializeField, UnityEngine.Range(0.5f, 2f)] private float overallPuzzlePieceScale = 1f;
     public Mesh defualtMesh;
     public Material defaultMat;
     public float maxDistanceBetweenPieces = 300f;
 
     [Header("Targets")]
-    public float errorMargain = 10f;
+    //public float errorMargain = 10f;
     Quaternion upTarget = new Quaternion();
     Quaternion rightTarget = new Quaternion();
     Quaternion downTarget = new Quaternion();
@@ -33,13 +46,12 @@ public class QRScanner : MonoBehaviour
     float[] diffs = new float[4];
 
     public float customZValue = 100f;
-    public PuzzlePiece qrPuzzlePiece;
     public RawImage rawCamOutput;
     int camHeight;
     int camWidth;
     byte[] imageBytes;
     System.Func<RGBLuminanceSource, LuminanceSource> f;
-    List<Tuple<Vector2, Vector3, int>> qrPieces = new List<Tuple<Vector2, Vector3, int>>();
+    List<QRPiece> detectedQRPieces = new List<QRPiece>();
     VuforiaCameraTexture vuforiaCam;
 
     private WebCamTexture webcamTexture;
@@ -49,6 +61,10 @@ public class QRScanner : MonoBehaviour
     public KeyValuePair<int, PieceDirection>[,] intendedSolutionBoard;
     public List<PuzzlePiece> puzzlePieces;
 
+
+    //Matrix<float> intrinsics;
+    //Matrix<float> distCoeffs;
+    
     void Start()
     {
         vuforiaCam = GetComponent<VuforiaCameraTexture>();
@@ -73,8 +89,37 @@ public class QRScanner : MonoBehaviour
         //webcamTexture = new WebCamTexture();
         //webcamTexture.Play();
 
-        GeneratePuzzleBoardSolution(2, 2);
+
+        //Resolution currentResolution = Screen.currentResolution;
+        //int w = currentResolution.width;
+
+        GeneratePuzzleBoardSolution(5, 5);
+        //ReadIntrinsicsFromFile(out intrinsics, out distCoeffs);
+        //Debug.Log(intrinsics);
+        //Debug.Log(distCoeffs);
     }
+
+    /*
+    public void ReadIntrinsicsFromFile(out Matrix<float> intrinsics, out Matrix<float> distCoeffs)
+    {
+        Mat intrinsicsMat = new Mat();
+        Mat distCoeffsMat = new Mat();
+        Debug.Log("bruih");
+        using FileStorage fs = new FileStorage("C:\\Users\\pxpet\\Desktop\\intrinsics.json", FileStorage.Mode.Read);
+
+        FileNode intrinsicsNode = fs.GetNode("Intrinsics");
+        FileNode distCoeffsNode = fs.GetNode("DistCoeffs");
+
+        intrinsicsNode.ReadMat(intrinsicsMat);
+        distCoeffsNode.ReadMat(distCoeffsMat);
+
+        intrinsics = new Matrix<float>(3, 3);
+        distCoeffs = new Matrix<float>(1, 5);
+
+        intrinsicsMat.ConvertTo(intrinsics, DepthType.Cv32F);
+        distCoeffsMat.ConvertTo(distCoeffs, DepthType.Cv32F);
+    }
+    */
 
     void GeneratePuzzleBoardSolution(int _width, int _height)
     {
@@ -82,6 +127,7 @@ public class QRScanner : MonoBehaviour
         List<int> usedPieces = new List<int>();
         puzzlePieces = new List<PuzzlePiece>();
         Transform cameraTransform = FindFirstObjectByType<VuforiaBehaviour>().transform;
+        UnityEngine.Random.InitState(puzzleSeed);
 
         for (int i = 0; i < _width; i++)
         {
@@ -102,6 +148,7 @@ public class QRScanner : MonoBehaviour
                 PuzzlePiece p = puzzlePiece.AddComponent<PuzzlePiece>();
                 p.pieceName = piece;
                 p.boardPosition = new Vector2(i, j);
+                p.fullGridSize = new Vector2(_width, _height);
 
                 puzzlePieces.Add(p);
                 
@@ -178,19 +225,29 @@ public class QRScanner : MonoBehaviour
     private void Update()
     {
         ScanForQRCodes();
+        Vector2 invertedYPos;
 
-        foreach (Tuple<Vector2, Vector3, int> qr in qrPieces)
+        foreach (QRPiece qr in detectedQRPieces)
         {
-            Resolution currentResolution = Screen.currentResolution;
-            int w = currentResolution.width;
+            PuzzlePiece qrPuzzlePiece = puzzlePieces.Find(x => x.pieceName == qr.id);
 
-            Vector2 invertedYPos = new Vector2(qr.Item1.x, (float)vuforiaCam.camHeight - qr.Item1.y);
+
+            if (!qr.inView)
+            {
+                qrPuzzlePiece.gameObject.SetActive(false);
+                continue;
+            }
+
+
+            qrPuzzlePiece.gameObject.SetActive(true);
+
+            invertedYPos = new Vector2(qr.position.x, (float)vuforiaCam.camHeight - qr.position.y);
             invertedYPos -= (new Vector2((float)vuforiaCam.camWidth, (float)vuforiaCam.camHeight) / 2f);
 
-            qrPuzzlePiece = puzzlePieces.Find(x => x.pieceName == qr.Item3);
             qrPuzzlePiece.transform.localPosition = new Vector3(invertedYPos.x, invertedYPos.y, 1900f);
+            qrPuzzlePiece.transform.localScale = Vector3.one * qr.scale * overallPuzzlePieceScale;
             qrPuzzlePiece.transform.localRotation = Quaternion.Inverse(Camera.main.transform.localRotation);
-            qrPuzzlePiece.transform.localRotation.SetLookRotation(qr.Item2, Vector3.forward);
+            qrPuzzlePiece.transform.localRotation.SetLookRotation(qr.direction, Vector3.forward);
             qrPuzzlePiece.currentDirection = DetectDirection(qrPuzzlePiece.transform.localRotation);
 
             UpdatePieceStatus(qrPuzzlePiece);
@@ -216,7 +273,7 @@ public class QRScanner : MonoBehaviour
                 {
                     pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctUp.Key);
                     distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
-                    p.statusUp = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y > p.transform.position.y && pieceToCheck.currentDirection == p.correctUp.Value;
+                    p.statusUp = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y > p.transform.position.y; // && pieceToCheck.currentDirection == p.correctUp.Value;
                 }
             }
             if (i == 1)
@@ -229,7 +286,7 @@ public class QRScanner : MonoBehaviour
                 {
                     pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctRight.Key);
                     distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
-                    p.statusRight = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x > p.transform.position.x && pieceToCheck.currentDirection == p.correctRight.Value;
+                    p.statusRight = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x > p.transform.position.x; // && pieceToCheck.currentDirection == p.correctRight.Value;
                 }
             }
             if (i == 2)
@@ -242,7 +299,7 @@ public class QRScanner : MonoBehaviour
                 {
                     pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctDown.Key);
                     distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
-                    p.statusDown = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y < p.transform.position.y && pieceToCheck.currentDirection == p.correctDown.Value;
+                    p.statusDown = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y < p.transform.position.y; // && pieceToCheck.currentDirection == p.correctDown.Value;
                 }
             }
             if (i == 3)
@@ -255,7 +312,7 @@ public class QRScanner : MonoBehaviour
                 {
                     pieceToCheck = puzzlePieces.Find(x => x.pieceName == p.correctLeft.Key);
                     distanceBetweenPieces = Vector3.Distance(pieceToCheck.transform.position, p.transform.position);
-                    p.statusLeft = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x < p.transform.position.x && pieceToCheck.currentDirection == p.correctLeft.Value;
+                    p.statusLeft = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x < p.transform.position.x; // && pieceToCheck.currentDirection == p.correctLeft.Value;
                 }
             }
         }
@@ -288,10 +345,15 @@ public class QRScanner : MonoBehaviour
         int height = vuforiaCam.camHeight;
         byte[] rawRGB = ConvertColor32ToByteArray(pixels);
         LuminanceSource source = new RGBLuminanceSource(rawRGB, width, height, RGBLuminanceSource.BitmapFormat.RGB32);
-
+        
         Result[] results = barcodeReader.DecodeMultiple(source);
         string allCodes = "QRs detected: ";
-        qrPieces.Clear();
+        //visibleQRPieces.Clear();
+
+        foreach (QRPiece qrp in detectedQRPieces)
+        {
+            qrp.inView = false;
+        }
 
         if (results == null || results.Length == 0)
         {
@@ -312,6 +374,7 @@ public class QRScanner : MonoBehaviour
             Vector2 p1 = new Vector2(points[1].X, points[1].Y);
             Vector2 p2 = new Vector2(points[2].X, points[2].Y);
 
+            float scaleByDistance = Vector2.Distance(p0, p2);
             float averageX = (points[0].X + points[2].X) / 2f;
             float averageY = (points[0].Y + points[2].Y) / 2f;
 
@@ -320,9 +383,21 @@ public class QRScanner : MonoBehaviour
 
             int pieceNumber = -1;
             int.TryParse(results[i].Text, out pieceNumber);
-            Debug.Log("Piecenum: " + pieceNumber);
+            //Debug.Log("Piecenum: " + pieceNumber);
 
-            qrPieces.Add(new Tuple<Vector2, Vector3, int>(averagePosition, dir, pieceNumber));
+            QRPiece piece = detectedQRPieces.Find(x => x.id == pieceNumber);
+
+            if (piece == null)
+            {
+                detectedQRPieces.Add(new QRPiece() { position = averagePosition, scale = scaleByDistance, direction = dir, id = pieceNumber, inView = true });
+            }
+            else
+            {
+                piece.position = averagePosition;
+                piece.scale = scaleByDistance;
+                piece.direction = dir;
+                piece.inView = true;
+            }
 
             //TODO: Add list of visible puzzle pieces, always updated (remove from list if out of view)
 
