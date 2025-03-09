@@ -45,8 +45,26 @@ public class PuzzlePiece : MonoBehaviour
         {
             matBlock.SetVector("_samplePosition", boardPosition);
             matBlock.SetVector("_gridSize", fullGridSize);
+            matBlock.SetFloat("_isDone", IsDone());
             r.SetPropertyBlock(matBlock);
-            Debug.Log("SET BLOCK : " + boardPosition);
+            //Debug.Log("SET BLOCK : " + boardPosition);
         }
+    }
+
+    public bool IsDoneBool()
+    {
+        return statusUp && statusRight && statusDown && statusLeft;
+    }
+
+    public float IsDone()
+    {
+        float result = 0f;
+
+        if (IsDoneBool())
+        {
+            result = 1f;
+        }
+
+        return result;
     }
 }

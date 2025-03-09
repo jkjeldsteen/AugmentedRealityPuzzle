@@ -137,7 +137,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &105059664
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -640,7 +640,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49ed0a359b84bdf459d2c668020cf29d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  useSeed: 1
   puzzleSeed: 0
+  puzzleSize: {x: 2, y: 2}
   overallPuzzlePieceScale: 1.2
   defualtMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   defaultMat: {fileID: 2100000, guid: d7d43de8605d8f84fb4f3ef57a53cf44, type: 2}

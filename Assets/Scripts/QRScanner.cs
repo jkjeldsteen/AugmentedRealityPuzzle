@@ -31,7 +31,9 @@ public class QRScanner : MonoBehaviour
 {
     GameObject videoBackground;
 
+    [SerializeField] private bool useSeed = false;
     [SerializeField] private int puzzleSeed = 0;
+    [SerializeField] private Vector2 puzzleSize = new Vector2(2, 2);
     [SerializeField, UnityEngine.Range(0.5f, 2f)] private float overallPuzzlePieceScale = 1f;
     public Mesh defualtMesh;
     public Material defaultMat;
@@ -93,7 +95,7 @@ public class QRScanner : MonoBehaviour
         //Resolution currentResolution = Screen.currentResolution;
         //int w = currentResolution.width;
 
-        GeneratePuzzleBoardSolution(5, 5);
+        GeneratePuzzleBoardSolution((int)puzzleSize.x, (int)puzzleSize.y);
         //ReadIntrinsicsFromFile(out intrinsics, out distCoeffs);
         //Debug.Log(intrinsics);
         //Debug.Log(distCoeffs);
@@ -127,7 +129,10 @@ public class QRScanner : MonoBehaviour
         List<int> usedPieces = new List<int>();
         puzzlePieces = new List<PuzzlePiece>();
         Transform cameraTransform = FindFirstObjectByType<VuforiaBehaviour>().transform;
-        UnityEngine.Random.InitState(puzzleSeed);
+        if (useSeed)
+        {
+            UnityEngine.Random.InitState(puzzleSeed);
+        }
 
         for (int i = 0; i < _width; i++)
         {
@@ -252,6 +257,12 @@ public class QRScanner : MonoBehaviour
 
             UpdatePieceStatus(qrPuzzlePiece);
         }
+
+        // If no unfinished piece is found, assume puzzle is finished correctly
+        if (puzzlePieces.Find(x => !x.IsDoneBool()) == null)
+        {
+            Debug.Log("PUZZLE DONE!");
+        }
     }
 
     private void UpdatePieceStatus(PuzzlePiece p)
@@ -346,6 +357,11 @@ public class QRScanner : MonoBehaviour
         byte[] rawRGB = ConvertColor32ToByteArray(pixels);
         LuminanceSource source = new RGBLuminanceSource(rawRGB, width, height, RGBLuminanceSource.BitmapFormat.RGB32);
         
+        if (source == null || barcodeReader == null)
+        {
+            return;
+        }
+
         Result[] results = barcodeReader.DecodeMultiple(source);
         string allCodes = "QRs detected: ";
         //visibleQRPieces.Clear();
