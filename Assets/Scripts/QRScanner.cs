@@ -13,12 +13,11 @@ using System.Collections.Generic;
 using Vuforia;
 using Unity.XR.CoreUtils;
 using System.Linq;
-using UnityEditor.Playables;
-using UnityEngine.UIElements;
+using UnityEngine.SceneManagement;
 
 public enum PieceDirection { UP, RIGHT, DOWN, LEFT }
 
-public class QRPiece
+[SerializeField, Serializable] public class QRPiece
 {
     public Vector2 position;
     public float scale;
@@ -29,47 +28,73 @@ public class QRPiece
 
 public class QRScanner : MonoBehaviour
 {
-    GameObject videoBackground;
-
+    [Header("Puzzle Board")]
+    [SerializeField] private bool disableObjectsOutsideView = false;
     [SerializeField] private bool useSeed = false;
     [SerializeField] private int puzzleSeed = 0;
     [SerializeField] private Vector2 puzzleSize = new Vector2(2, 2);
     [SerializeField, UnityEngine.Range(0.5f, 2f)] private float overallPuzzlePieceScale = 1f;
-    public Mesh defualtMesh;
-    public Material defaultMat;
-    public float maxDistanceBetweenPieces = 300f;
+    [SerializeField] private Mesh defualtMesh;
+    [SerializeField] private Material defaultMat;
+    [SerializeField] private float maxDistanceBetweenPieces = 300f;
 
-    [Header("Targets")]
-    //public float errorMargain = 10f;
-    Quaternion upTarget = new Quaternion();
-    Quaternion rightTarget = new Quaternion();
-    Quaternion downTarget = new Quaternion();
-    Quaternion leftTarget = new Quaternion();
-    float[] diffs = new float[4];
+    [HideInInspector] public KeyValuePair<int, PieceDirection>[,] intendedSolutionBoard;
+    [HideInInspector] public List<PuzzlePiece> puzzlePieces;
+    private float resolutionScale;
+    private GameObject newGameButton;
 
-    public float customZValue = 100f;
-    public RawImage rawCamOutput;
-    int camHeight;
-    int camWidth;
-    byte[] imageBytes;
-    System.Func<RGBLuminanceSource, LuminanceSource> f;
-    List<QRPiece> detectedQRPieces = new List<QRPiece>();
-    VuforiaCameraTexture vuforiaCam;
+    /*
+    [Header("Target directions")]
+    private Quaternion upTarget = new Quaternion();
+    private Quaternion rightTarget = new Quaternion();
+    private Quaternion downTarget = new Quaternion();
+    private Quaternion leftTarget = new Quaternion();
+    private float[] diffs = new float[4];
+    */
 
-    private WebCamTexture webcamTexture;
-    private BarcodeReader<RGBLuminanceSource> barcodeReader;
+    [Header("Camera")]
+    [SerializeField] private RawImage rawCamOutput;
+    private int camHeight;
+    private int camWidth;
+    public List<QRPiece> detectedQRPieces = new List<QRPiece>();
+    private VuforiaCameraTexture vuforiaCam;
+    private GameObject videoBackground;
 
-    [Header("Puzzle Board")]
-    public KeyValuePair<int, PieceDirection>[,] intendedSolutionBoard;
-    public List<PuzzlePiece> puzzlePieces;
+    [Header("Decoding")]
+    private BarcodeReaderGeneric barcodeReader;
+    private RGBLuminanceSource source;
+    private Vector2 p0;
+    private Vector2 p1;
+    private Vector2 p2;
+    private ResultPoint[] points;
+    private float averageX;
+    private float averageY;
+    private float scaleByDistance;
+    private Vector2 averagePosition;
+    private Vector3 dir;
+    private int pieceNumber;
+    private Vector2 invertedYPos;
+    private System.Func<RGBLuminanceSource, LuminanceSource> f;
 
-
-    //Matrix<float> intrinsics;
-    //Matrix<float> distCoeffs;
-    
     void Start()
     {
         vuforiaCam = GetComponent<VuforiaCameraTexture>();
+        newGameButton = GameObject.Find("NewGame");
+        newGameButton.SetActive(false);
+        // Unused, for DataMatrix scans:
+        /*
+        barcodeReader = new BarcodeReaderGeneric()
+        {
+            AutoRotate = true,
+            Options = new DecodingOptions
+            {
+                PossibleFormats = new List<BarcodeFormat> { BarcodeFormat.DATA_MATRIX },
+                TryHarder = true,
+                ReturnCodabarStartEnd = false,
+                PureBarcode = false
+            }
+        };
+        */
 
         barcodeReader = new BarcodeReader<RGBLuminanceSource>(f)
         {
@@ -81,54 +106,24 @@ public class QRScanner : MonoBehaviour
             }
         };
 
+        /*
         upTarget.eulerAngles = new Vector3(-90, 0, 0);
         rightTarget.eulerAngles = new Vector3(0, 90, -90);
         downTarget.eulerAngles = new Vector3(90, 0, -180);
         leftTarget.eulerAngles = new Vector3(0, -90, 90);
-
-        // Start the webcam
-        //webcamTexture = new WebCamTexture(720, 480, 60);
-        //webcamTexture = new WebCamTexture();
-        //webcamTexture.Play();
-
-
-        //Resolution currentResolution = Screen.currentResolution;
-        //int w = currentResolution.width;
+        */
 
         GeneratePuzzleBoardSolution((int)puzzleSize.x, (int)puzzleSize.y);
-        //ReadIntrinsicsFromFile(out intrinsics, out distCoeffs);
-        //Debug.Log(intrinsics);
-        //Debug.Log(distCoeffs);
     }
-
-    /*
-    public void ReadIntrinsicsFromFile(out Matrix<float> intrinsics, out Matrix<float> distCoeffs)
-    {
-        Mat intrinsicsMat = new Mat();
-        Mat distCoeffsMat = new Mat();
-        Debug.Log("bruih");
-        using FileStorage fs = new FileStorage("C:\\Users\\pxpet\\Desktop\\intrinsics.json", FileStorage.Mode.Read);
-
-        FileNode intrinsicsNode = fs.GetNode("Intrinsics");
-        FileNode distCoeffsNode = fs.GetNode("DistCoeffs");
-
-        intrinsicsNode.ReadMat(intrinsicsMat);
-        distCoeffsNode.ReadMat(distCoeffsMat);
-
-        intrinsics = new Matrix<float>(3, 3);
-        distCoeffs = new Matrix<float>(1, 5);
-
-        intrinsicsMat.ConvertTo(intrinsics, DepthType.Cv32F);
-        distCoeffsMat.ConvertTo(distCoeffs, DepthType.Cv32F);
-    }
-    */
 
     void GeneratePuzzleBoardSolution(int _width, int _height)
     {
         intendedSolutionBoard = new KeyValuePair<int, PieceDirection>[_width, _height];
-        List<int> usedPieces = new List<int>();
         puzzlePieces = new List<PuzzlePiece>();
+
+        List<int> usedPieces = new List<int>();
         Transform cameraTransform = FindFirstObjectByType<VuforiaBehaviour>().transform;
+
         if (useSeed)
         {
             UnityEngine.Random.InitState(puzzleSeed);
@@ -143,7 +138,8 @@ public class QRScanner : MonoBehaviour
                 do
                 {
                     piece = UnityEngine.Random.Range(1, (_width * _height) + 1);
-                } while (usedPieces.Contains(piece));
+                }
+                while (usedPieces.Contains(piece));
 
                 usedPieces.Add(piece);
 
@@ -179,22 +175,10 @@ public class QRScanner : MonoBehaviour
                 offsetXPos = (int)p.boardPosition.x;
                 offsetYPos = (int)p.boardPosition.y;
 
-                if (i == 0) // Up
-                {
-                    offsetYPos += 1;
-                }
-                if (i == 1) // Right
-                {
-                    offsetXPos += 1;
-                } 
-                if (i == 2) // Down
-                {
-                    offsetYPos -= 1;
-                }
-                if (i == 3) // Left
-                {
-                    offsetXPos -= 1;
-                }
+                if (i == 0) { offsetYPos += 1; } // Up
+                if (i == 1) { offsetXPos += 1; } // Right 
+                if (i == 2) { offsetYPos -= 1; } // Down
+                if (i == 3) { offsetXPos -= 1; } // Left
 
                 if (offsetXPos >= 0 && offsetXPos < _width && offsetYPos >= 0 && offsetYPos < _height)
                 {
@@ -207,39 +191,33 @@ public class QRScanner : MonoBehaviour
                     pair = new KeyValuePair<int, PieceDirection>(-1, PieceDirection.UP);
                 }
 
-                if (i == 0) // Up
-                {
-                    p.correctUp = pair;
-                }
-                if (i == 1) // Right
-                {
-                    p.correctRight = pair;
-                }
-                if (i == 2) // Down
-                {
-                    p.correctDown = pair;
-                }
-                if (i == 3) // Left
-                {
-                    p.correctLeft = pair;
-                }
+                if (i == 0) { p.correctUp = pair; }     // Up
+                if (i == 1) { p.correctRight = pair; }  // Right
+                if (i == 2) { p.correctDown = pair; }   // Down
+                if (i == 3) { p.correctLeft = pair; }   // Left
             }
         }
     }
 
     private void Update()
     {
-        ScanForQRCodes();
-        Vector2 invertedYPos;
+        ScanForCodes();
 
         foreach (QRPiece qr in detectedQRPieces)
         {
             PuzzlePiece qrPuzzlePiece = puzzlePieces.Find(x => x.pieceName == qr.id);
 
+            if (qrPuzzlePiece == null)
+            {
+                continue;
+            }
 
             if (!qr.inView)
             {
-                qrPuzzlePiece.gameObject.SetActive(false);
+                if (disableObjectsOutsideView)
+                {
+                    qrPuzzlePiece.gameObject.SetActive(false);
+                }
                 continue;
             }
 
@@ -248,12 +226,20 @@ public class QRScanner : MonoBehaviour
 
             invertedYPos = new Vector2(qr.position.x, (float)vuforiaCam.camHeight - qr.position.y);
             invertedYPos -= (new Vector2((float)vuforiaCam.camWidth, (float)vuforiaCam.camHeight) / 2f);
+            
 
-            qrPuzzlePiece.transform.localPosition = new Vector3(invertedYPos.x, invertedYPos.y, 1900f);
-            qrPuzzlePiece.transform.localScale = Vector3.one * qr.scale * overallPuzzlePieceScale;
+            // Apply transform variables
+            qrPuzzlePiece.transform.localPosition = new Vector3(invertedYPos.x * resolutionScale, invertedYPos.y * resolutionScale, 1900f);
+            qrPuzzlePiece.transform.localScale = (Vector3.one * resolutionScale) * qr.scale * overallPuzzlePieceScale;
+
+            
             qrPuzzlePiece.transform.localRotation = Quaternion.Inverse(Camera.main.transform.localRotation);
             qrPuzzlePiece.transform.localRotation.SetLookRotation(qr.direction, Vector3.forward);
+
+            //NOTE: Unused due to not being able to track rotation of individual QRs
+            /*
             qrPuzzlePiece.currentDirection = DetectDirection(qrPuzzlePiece.transform.localRotation);
+            */
 
             UpdatePieceStatus(qrPuzzlePiece);
         }
@@ -261,8 +247,13 @@ public class QRScanner : MonoBehaviour
         // If no unfinished piece is found, assume puzzle is finished correctly
         if (puzzlePieces.Find(x => !x.IsDoneBool()) == null)
         {
-            Debug.Log("PUZZLE DONE!");
+            newGameButton.SetActive(true);
         }
+    }
+
+    public void ResetPuzzle()
+    {
+        SceneManager.LoadScene(0);
     }
 
     private void UpdatePieceStatus(PuzzlePiece p)
@@ -274,7 +265,9 @@ public class QRScanner : MonoBehaviour
         {
             pieceToCheck = null;
 
-            if (i == 0)
+            //NOTE: Disabled checking direction when assigning p.status_up/right/down/left, due to being unable to track QR rotations...
+
+            if (i == 0) // Up
             {
                 if (p.correctUp.Key == -1) // Piece that should be at this position is empty (outside board)
                 {
@@ -287,7 +280,7 @@ public class QRScanner : MonoBehaviour
                     p.statusUp = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y > p.transform.position.y; // && pieceToCheck.currentDirection == p.correctUp.Value;
                 }
             }
-            if (i == 1)
+            if (i == 1) // Right
             {
                 if (p.correctRight.Key == -1) // Outside board check
                 {
@@ -300,7 +293,7 @@ public class QRScanner : MonoBehaviour
                     p.statusRight = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.x > p.transform.position.x; // && pieceToCheck.currentDirection == p.correctRight.Value;
                 }
             }
-            if (i == 2)
+            if (i == 2) // Down
             {
                 if (p.correctDown.Key == -1) // Outside board check
                 {
@@ -313,7 +306,7 @@ public class QRScanner : MonoBehaviour
                     p.statusDown = distanceBetweenPieces < maxDistanceBetweenPieces && pieceToCheck.transform.position.y < p.transform.position.y; // && pieceToCheck.currentDirection == p.correctDown.Value;
                 }
             }
-            if (i == 3)
+            if (i == 3) // Left
             {
                 if (p.correctLeft.Key == -1) // Outside board check
                 {
@@ -329,7 +322,7 @@ public class QRScanner : MonoBehaviour
         }
     }
 
-    void ScanForQRCodes()
+    void ScanForCodes()
     {
         if (videoBackground == null)
         {
@@ -352,19 +345,43 @@ public class QRScanner : MonoBehaviour
         rawCamOutput.texture = tx;
 
         Color32[] pixels = vuforiaCam.GetColorArray();
-        int width = vuforiaCam.camWidth;
-        int height = vuforiaCam.camHeight;
-        byte[] rawRGB = ConvertColor32ToByteArray(pixels);
-        LuminanceSource source = new RGBLuminanceSource(rawRGB, width, height, RGBLuminanceSource.BitmapFormat.RGB32);
+        camWidth = vuforiaCam.camWidth;
+        camHeight = vuforiaCam.camHeight;
+        resolutionScale = 1920f / (float)vuforiaCam.camWidth;
+
+        if (pixels == null)
+        {
+            return;
+        }
         
-        if (source == null || barcodeReader == null)
+        byte[] rawRGB = ConvertColor32ToByteArray(pixels);
+        source = new RGBLuminanceSource(rawRGB, camWidth, camHeight, RGBLuminanceSource.BitmapFormat.RGB32);
+
+        if (source == null)
         {
             return;
         }
 
-        Result[] results = barcodeReader.DecodeMultiple(source);
-        string allCodes = "QRs detected: ";
-        //visibleQRPieces.Clear();
+        // NOTE: For DataMatrix scans:
+        /*
+        Tuple<int, Vector2[], float>[] results = DecodeDataMatrixFromColor32(pixels, rawRGB, camWidth, camHeight, source, RGBLuminanceSource.BitmapFormat.RGB32);
+        foreach (var item in results)
+        {
+            int decodedNumber = item.Item1;
+            Vector2[] corners = item.Item2;
+            float rotation = item.Item3;
+        }
+        */
+
+        Result[] results = null;
+
+        //NOTE: For QR scans:
+        try
+        {
+            results = barcodeReader.DecodeMultiple(source);
+            //results = barcodeReader.DecodeMultiple(rawRGB, camWidth, camHeight, RGBLuminanceSource.BitmapFormat.RGB32);
+        }
+        catch (Exception e) { }
 
         foreach (QRPiece qrp in detectedQRPieces)
         {
@@ -378,34 +395,31 @@ public class QRScanner : MonoBehaviour
 
         for (int i = 0; i < results.Length; i++)
         {
-            if (i != 0)
-            {
-                allCodes += ", ";
-            }
-            allCodes += results[i].Text;
+            points = results[i].ResultPoints;
+            p0 = new Vector2(points[0].X, points[0].Y);
+            p1 = new Vector2(points[1].X, points[1].Y);
+            p2 = new Vector2(points[2].X, points[2].Y);
 
-            ResultPoint[] points = results[i].ResultPoints;
+            scaleByDistance = Vector2.Distance(p0, p2);
+            averageX = (points[0].X + points[2].X) / 2f;
+            averageY = (points[0].Y + points[2].Y) / 2f;
 
-            Vector2 p0 = new Vector2(points[0].X, points[0].Y);
-            Vector2 p1 = new Vector2(points[1].X, points[1].Y);
-            Vector2 p2 = new Vector2(points[2].X, points[2].Y);
+            averagePosition = new Vector2(averageX, averageY);
+            dir = Vector3.Normalize(averagePosition - p1);
 
-            float scaleByDistance = Vector2.Distance(p0, p2);
-            float averageX = (points[0].X + points[2].X) / 2f;
-            float averageY = (points[0].Y + points[2].Y) / 2f;
-
-            Vector2 averagePosition = new Vector2(averageX, averageY);
-            Vector3 dir = Vector3.Normalize(averagePosition - p1);
-
-            int pieceNumber = -1;
+            pieceNumber = -1;
             int.TryParse(results[i].Text, out pieceNumber);
-            //Debug.Log("Piecenum: " + pieceNumber);
 
             QRPiece piece = detectedQRPieces.Find(x => x.id == pieceNumber);
 
             if (piece == null)
             {
-                detectedQRPieces.Add(new QRPiece() { position = averagePosition, scale = scaleByDistance, direction = dir, id = pieceNumber, inView = true });
+                detectedQRPieces.Add(new QRPiece() {
+                    position = averagePosition, 
+                    scale = scaleByDistance, 
+                    direction = dir, 
+                    id = pieceNumber, 
+                    inView = true });
             }
             else
             {
@@ -414,48 +428,7 @@ public class QRScanner : MonoBehaviour
                 piece.direction = dir;
                 piece.inView = true;
             }
-
-            //TODO: Add list of visible puzzle pieces, always updated (remove from list if out of view)
-
-            if (allCodes != "QRs detected: , ")
-            {
-                //Debug.Log(dir);
-                //Debug.Log(points[0]);
-                //Debug.Log(allCodes + " - At Position: " + averagePosition);
-                //Debug.Log(allCodes + " - With rotation degrees: " + orientationDegress);
-            }
         }
-    }
-    
-
-
-    private PieceDirection DetectDirection(Quaternion _rotation)
-    {
-        diffs[0] = Quaternion.Angle(upTarget, _rotation);
-        diffs[1] = Quaternion.Angle(rightTarget, _rotation);
-        diffs[2] = Quaternion.Angle(downTarget, _rotation);
-        diffs[3] = Quaternion.Angle(leftTarget, _rotation);
-
-        float smallest = Mathf.Min(diffs);
-
-        if (smallest == diffs[0])
-        {
-            return PieceDirection.UP;
-        }
-        else if (smallest == diffs[1])
-        {
-            return PieceDirection.RIGHT;
-        }
-        else if (smallest == diffs[2])
-        {
-            return PieceDirection.DOWN;
-        }
-        else if (smallest == diffs[3])
-        {
-            return PieceDirection.LEFT;
-        }
-
-        return PieceDirection.UP;
     }
 
     private byte[] ConvertColor32ToByteArray(Color32[] colors)
@@ -470,4 +443,80 @@ public class QRScanner : MonoBehaviour
         }
         return bytes;
     }
+
+    // NOTE: Attempted to use DataMatrix for faster decoding, ended up being less reliable than QR codes and is thus unusued:
+    
+    /*
+    public Tuple<int, Vector2[], float>[] DecodeDataMatrixFromColor32(Color32[] image, byte[] raw, int width, int height, RGBLuminanceSource otherSource, RGBLuminanceSource.BitmapFormat bitformat)
+    {
+        byte[] luminance = new byte[width * height];
+
+        for (int i = 0; i < luminance.Length; i++)
+        {
+            // Convert Color32 to grayscale using luminosity formula
+            Color32 pixel = image[i];
+            luminance[i] = (byte)(0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b);
+        }
+
+        RGBLuminanceSource luminanceSource = new RGBLuminanceSource(luminance, width, height);
+
+        List<Tuple<int, Vector2[], float>> decodedValuesWithPositionAndRotation = new List<Tuple<int, Vector2[], float>>();
+        Result[] results = null;
+
+        try
+        {
+            if (otherSource != null && barcodeReader != null)
+            {
+                //results = barcodeReader.DecodeMultiple(luminanceSource);
+                results = barcodeReader.DecodeMultiple(raw, width, height, bitformat);
+            }
+        } catch (Exception e) { }
+
+        if (results != null)
+        {
+            foreach (var result in results)
+            {
+                int decodedNum = -1;
+                int.TryParse(result.Text, out decodedNum);
+
+                Vector2[] points = new Vector2[result.ResultPoints.Length];
+                for (int i = 0; i < result.ResultPoints.Length; i++)
+                {
+                    points[i] = new Vector2(result.ResultPoints[i].X, result.ResultPoints[i].Y);
+                }
+
+                float rotation = CalculateRotation(points[0], points[1]);
+
+                decodedValuesWithPositionAndRotation.Add(new Tuple<int, Vector2[], float>(decodedNum, points, rotation));
+            }
+        }
+        
+        return decodedValuesWithPositionAndRotation.ToArray();
+    }
+    
+
+    private static float CalculateRotation(Vector2 point1, Vector2 point2)
+    {
+        float angleInRadians = Mathf.Atan2(point2.y - point1.y, point2.x - point1.x);
+        return Mathf.Rad2Deg * angleInRadians;
+    }
+
+    private PieceDirection DetectDirection(Quaternion _rotation)
+    {
+        //NOTE: Unused due to not being able to track rotation of individual QRs
+        diffs[0] = Quaternion.Angle(upTarget, _rotation);
+        diffs[1] = Quaternion.Angle(rightTarget, _rotation);
+        diffs[2] = Quaternion.Angle(downTarget, _rotation);
+        diffs[3] = Quaternion.Angle(leftTarget, _rotation);
+
+        float smallest = Mathf.Min(diffs);
+
+        if (smallest == diffs[0]) { return PieceDirection.UP; }
+        else if (smallest == diffs[1]) { return PieceDirection.RIGHT; }
+        else if (smallest == diffs[2]) { return PieceDirection.DOWN; }
+        else if (smallest == diffs[3]) { return PieceDirection.LEFT; }
+
+        return PieceDirection.UP;
+    }
+    */
 }

@@ -3,42 +3,30 @@ using UnityEngine;
 
 public class PuzzlePiece : MonoBehaviour
 {
-    public bool statusUp = false;
-    public bool statusRight = false;
-    public bool statusDown = false;
-    public bool statusLeft = false;
+    [HideInInspector] public int pieceName;
+    [HideInInspector] public Vector2 fullGridSize;
+    [HideInInspector] public Vector2 boardPosition;
+    [HideInInspector] public PieceDirection currentDirection;
 
-    public KeyValuePair<int, PieceDirection> correctUp;
-    public KeyValuePair<int, PieceDirection> correctRight;
-    public KeyValuePair<int, PieceDirection> correctDown;
-    public KeyValuePair<int, PieceDirection> correctLeft;
+    [HideInInspector] public bool statusUp = false;
+    [HideInInspector] public bool statusRight = false;
+    [HideInInspector] public bool statusDown = false;
+    [HideInInspector] public bool statusLeft = false;
 
-    public Vector2 fullGridSize;
-    public int pieceName;
-    public Vector2 boardPosition;
-    public PieceDirection currentDirection;
+    [HideInInspector] public KeyValuePair<int, PieceDirection> correctUp;
+    [HideInInspector] public KeyValuePair<int, PieceDirection> correctRight;
+    [HideInInspector] public KeyValuePair<int, PieceDirection> correctDown;
+    [HideInInspector] public KeyValuePair<int, PieceDirection> correctLeft;
 
-    //public PuzzlePiece(KeyValuePair<int, PieceDirection> up, KeyValuePair<int, PieceDirection> right, KeyValuePair<int, PieceDirection> down, KeyValuePair<int, PieceDirection> left)
-    //public PuzzlePiece(int pieceNumber)
-    //{
-    //    //correctUp = up;
-    //    //correctRight = right;
-    //    //correctDown = down;
-    //    //correctLeft = left;
-    //    pieceIndex = pieceNumber;
-    //}
+    private Renderer r;
+    private MaterialPropertyBlock matBlock;
 
-    Renderer r;
-    MaterialPropertyBlock matBlock;
-
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         r = GetComponent<Renderer>();
         matBlock = new MaterialPropertyBlock();
     }
 
-    // Update is called once per frame
     void Update()
     {
         if (matBlock != null)
@@ -47,7 +35,6 @@ public class PuzzlePiece : MonoBehaviour
             matBlock.SetVector("_gridSize", fullGridSize);
             matBlock.SetFloat("_isDone", IsDone());
             r.SetPropertyBlock(matBlock);
-            //Debug.Log("SET BLOCK : " + boardPosition);
         }
     }
 
