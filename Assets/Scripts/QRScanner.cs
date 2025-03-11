@@ -396,6 +396,10 @@ public class QRScanner : MonoBehaviour
         for (int i = 0; i < results.Length; i++)
         {
             points = results[i].ResultPoints;
+            if (points == null || points.Length == 0)
+            {
+                continue;
+            }
             p0 = new Vector2(points[0].X, points[0].Y);
             p1 = new Vector2(points[1].X, points[1].Y);
             p2 = new Vector2(points[2].X, points[2].Y);
